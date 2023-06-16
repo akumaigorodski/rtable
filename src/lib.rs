@@ -11,13 +11,24 @@ pub struct Table<'a, C: Eq + Hash, R: Eq + Hash, V: Eq + Hash> {
     rows: HashMap<&'a R, HashSet<&'a V>>,
 }
 
+#[derive(Clone, Debug)]
+pub struct InverseTable<'a, C: Eq + Hash, R: Eq + Hash, V: Eq + Hash> {
+    columns_except: HashMap<(&'a C, &'a R), HashSet<&'a V>>,
+    rows_except: HashMap<(&'a C, &'a R), HashSet<&'a V>>,
+}
+
 impl<'a, C: Eq + Hash, R: Eq + Hash, V: Eq + Hash> Table<'a, C, R, V> {
-    pub fn new() -> Table<'a, C, R, V> {
+    pub fn new() -> Self {
         Table {
             tuples: HashMap::new(),
             columns: HashMap::new(),
             rows: HashMap::new(),
         }
+    }
+
+    pub fn strict_insert(&mut self, column: &'a C, row: &'a R, value: &'a V) -> &mut Self {
+        assert_eq!(self.tuples.get(&(column, row)).map(|set| set.contains(value)).unwrap_or(false), false);
+        self.insert(column, row, value)
     }
 
     pub fn insert(&mut self, column: &'a C, row: &'a R, value: &'a V) -> &mut Self {
@@ -37,9 +48,9 @@ impl<'a, C: Eq + Hash, R: Eq + Hash, V: Eq + Hash> Table<'a, C, R, V> {
     pub fn remove_by_value(&mut self, value_to_remove: &'a V) -> &mut Self {
         let mut items_to_remove = HashSet::<(&C, &R)>::new();
 
-        for (&tuple, values) in self.tuples.iter() {
+        for (tuple, values) in &self.tuples {
             if values.contains(value_to_remove) {
-                items_to_remove.insert(tuple);
+                items_to_remove.insert(*tuple);
             }
         }
 
@@ -53,7 +64,7 @@ impl<'a, C: Eq + Hash, R: Eq + Hash, V: Eq + Hash> Table<'a, C, R, V> {
     pub fn remove_by_row(&mut self, row_to_remove: &'a R) -> &mut Self {
         let mut items_to_remove = HashSet::<(&C, &V)>::new();
 
-        for (tuple, vals) in self.tuples.iter() {
+        for (tuple, vals) in &self.tuples {
             if tuple.1 == row_to_remove {
                 for &value in vals {
                     let item = (tuple.0, value);
@@ -72,7 +83,7 @@ impl<'a, C: Eq + Hash, R: Eq + Hash, V: Eq + Hash> Table<'a, C, R, V> {
     pub fn remove_by_column(&mut self, column_to_remove: &'a C) -> &mut Self {
         let mut items_to_remove = HashSet::<(&R, &V)>::new();
 
-        for (tuple, vals) in self.tuples.iter() {
+        for (tuple, vals) in &self.tuples {
             if tuple.0 == column_to_remove {
                 for &value in vals {
                     let item = (tuple.1, value);
@@ -93,6 +104,31 @@ impl<'a, C: Eq + Hash, R: Eq + Hash, V: Eq + Hash> Table<'a, C, R, V> {
         let all_non_empty = !self.tuples.is_empty() && !self.columns.is_empty() && !self.rows.is_empty();
         assert!(all_empty || all_non_empty);
         all_empty
+    }
+}
+
+impl<'a, C: Eq + Hash, R: Eq + Hash, V: Eq + Hash> InverseTable<'a, C, R, V> {
+    // This constructs sets of values that each row and column have except where they intersect
+
+    pub fn rebuild_from(table: &Table<'a, C, R, V>) -> Self {
+        let mut columns_except = HashMap::<(&'a C, &'a R), HashSet<&'a V>>::new();
+        let mut rows_except = HashMap::<(&'a C, &'a R), HashSet<&'a V>>:: new();
+
+        for &key @ (column, row) in table.tuples.keys() {
+            let column_values = table.columns.get(column).unwrap();
+            let row_values = table.rows.get(row).unwrap();
+
+            let column_values_diff = column_values.difference(row_values).map(|&value| value).collect();
+            let row_values_diff = row_values.difference(column_values).map(|&value| value).collect();
+
+            columns_except.insert(key, column_values_diff);
+            rows_except.insert(key, row_values_diff);
+        }
+
+        InverseTable {
+            columns_except,
+            rows_except
+        }
     }
 }
 
@@ -158,5 +194,24 @@ mod tests {
         table.insert(&"b", &"a", &12);
         table.insert(&"c", &"a", &14);
         assert!(table.remove_by_row(&"a").is_empty());
+    }
+
+    #[test]
+    fn inverse_table() {
+        let mut hs1 = HashSet::<&i32>::new();
+        hs1.insert(&12);
+        hs1.insert(&15);
+
+        let mut hs2 = HashSet::<&i32>::new();
+        hs2.insert(&16);
+
+        let mut table: Table<&str, &str, i32> = Table::new();
+        table.insert(&"a", &"b", &12);
+        table.insert(&"a", &"c", &14);
+        table.insert(&"a", &"d", &15);
+        table.insert(&"e", &"b", &16);
+        let inverse: InverseTable<&str, &str, i32> = InverseTable::rebuild_from(&table);
+        assert_eq!(inverse.columns_except.get(&(&"a", &"c")).unwrap(), &hs1);
+        assert_eq!(inverse.rows_except.get(&(&"a", &"b")).unwrap(), &hs2);
     }
 }
