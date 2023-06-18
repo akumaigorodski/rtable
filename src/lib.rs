@@ -109,10 +109,6 @@ impl<'a, C: TableKV<'a>, R: TableKV<'a>, V: TableKV<'a>> Table<'a, C, R, V> {
         assert!(all_empty || all_non_empty);
         all_empty
     }
-
-    pub fn extract_values<T: TableKV<'a>>(&self, keys: &'a HashSet<&str>, storage: &'a HashMap<&str, T>) -> HashSet<&'a T> {
-        keys.iter().filter_map(|key| storage.get(key)).collect()
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -227,23 +223,5 @@ mod tests {
         let inverse: InverseTable = InverseTable::rebuild_from(&table);
         assert_eq!(inverse.column_value_keys_except.get(&("a", "c")).unwrap(), &hs1);
         assert_eq!(inverse.row_value_keys_except.get(&("a", "b")).unwrap(), &hs2);
-    }
-
-    #[test]
-    fn extract_values() {
-        let mut table: Table<Container, Container, Container> = Table::new();
-        table.insert(Container("a"), Container("b"), Container("12"));
-        table.insert(Container("a"), Container("c"), Container("14"));
-        table.insert(Container("a"), Container("d"), Container("15"));
-        table.insert(Container("e"), Container("b"), Container("16"));
-
-        let mut hs1 = HashSet::<&str>::new();
-        hs1.insert(&"14");
-        hs1.insert(&"15");
-
-        let inverse: InverseTable = InverseTable::rebuild_from(&table);
-        let column_keys = inverse.column_value_keys_except.get(&("a", "b")).unwrap();
-        let set: HashSet<&str> = table.extract_values(column_keys, &table.vs).iter().map(|v| v.0).collect();
-        assert_eq!(set, hs1);
     }
 }
