@@ -1,4 +1,4 @@
-//#![no_std]
+#![no_std]
 
 use hashbrown::HashMap;
 use hashbrown::HashSet;
