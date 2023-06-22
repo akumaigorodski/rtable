@@ -1,24 +1,21 @@
-#![no_std]
+//#![no_std]
 
-extern crate alloc;
-
-use alloc::string::String;
 use hashbrown::HashMap;
 use hashbrown::HashSet;
 use core::hash::Hash;
 
-pub trait TableKV: Eq + PartialEq {
-    fn id(&self) -> String;
+pub trait TableKV: Eq + PartialEq + Hash {
+    fn id(&self) -> usize;
 }
 
 #[derive(Clone, Debug)]
 pub struct Table<C: TableKV, R: TableKV, V: TableKV> {
-    tuples: HashMap<(String, String), HashSet<String>>,
-    columns: HashMap<String, HashSet<String>>,
-    rows: HashMap<String, HashSet<String>>,
-    vs: HashMap<String, V>,
-    cs: HashMap<String, C>,
-    rs: HashMap<String, R>,
+    pub tuples: HashMap<(usize, usize), HashSet<usize>>,
+    pub columns: HashMap<usize, HashSet<usize>>,
+    pub rows: HashMap<usize, HashSet<usize>>,
+    pub vs: HashMap<usize, V>,
+    pub cs: HashMap<usize, C>,
+    pub rs: HashMap<usize, R>,
 }
 
 impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
@@ -33,88 +30,69 @@ impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
         }
     }
 
-    pub fn insert(&mut self, column: C, row: R, value: V) -> &mut Self {
+    pub fn insert(&mut self, column: C, row: R, value: V) {
         let column_key = column.id();
         let value_key = value.id();
         let row_key = row.id();
 
-        let column_key_clone = column_key.clone();
-        let row_key_clone = row_key.clone();
-
-        let column_row_key = (column_key_clone, row_key_clone);
-        self.tuples.entry(column_row_key).or_insert_with(HashSet::new).insert(value_key.clone());
-        self.columns.entry(column_key.clone()).or_insert_with(HashSet::new).insert(value_key.clone());
-        self.rows.entry(row_key.clone()).or_insert_with(HashSet::new).insert(value_key.clone());
+        let column_row_key = (column_key, row_key);
+        self.tuples.entry(column_row_key).or_insert_with(HashSet::new).insert(value_key);
+        self.columns.entry(column_key).or_insert_with(HashSet::new).insert(value_key);
+        self.rows.entry(row_key).or_insert_with(HashSet::new).insert(value_key);
 
         self.vs.insert(value_key, value);
         self.cs.insert(column_key, column);
         self.rs.insert(row_key, row);
-
-        self
     }
 
-    pub fn remove(&mut self, column_key: &String, row_key: &String, value_key: &String) -> &mut Self {
-        let column_key_clone = column_key.clone();
-        let row_key_clone = row_key.clone();
+    pub fn remove(&mut self, column_key: usize, row_key: usize, value_key: usize) {
+        remove_from_set_and_map(&mut self.tuples, &(column_key, row_key), &value_key);
+        remove_from_set_and_map(&mut self.columns, &column_key, &value_key);
+        remove_from_set_and_map(&mut self.rows, &row_key, &value_key);
 
-        let column_row_key = &(column_key_clone, row_key_clone);
-        remove_from_set_and_map(&mut self.tuples, column_row_key, value_key);
-        remove_from_set_and_map(&mut self.columns, column_key, value_key);
-        remove_from_set_and_map(&mut self.rows, row_key, value_key);
+        self.vs.remove(&value_key);
 
-        self.vs.remove(value_key);
-
-        if !self.columns.contains_key(column_key) {
-            self.cs.remove(column_key);
+        if !self.columns.contains_key(&column_key) {
+            self.cs.remove(&column_key);
         }
 
-        if !self.rows.contains_key(row_key) {
-            self.rs.remove(row_key);
+        if !self.rows.contains_key(&row_key) {
+            self.rs.remove(&row_key);
         }
-
-        self
     }
 
-    pub fn remove_by_row(&mut self, row_key_to_remove: &String) -> &mut Self {
-        let mut items_to_remove = HashSet::<(String, String)>::new();
+    pub fn remove_by_row(&mut self, row_key_to_remove: usize) {
+        let mut items_to_remove = HashSet::<(usize, usize)>::new();
 
         for (tuple, vals) in &self.tuples {
-            if tuple.1 == *row_key_to_remove {
+            if tuple.1 == row_key_to_remove {
                 for value_key in vals {
-                    let column_key = tuple.0.clone();
-                    let value_key = value_key.clone();
-                    let item = (column_key, value_key);
+                    let item = (tuple.0, *value_key);
                     items_to_remove.insert(item);
                 }
             }
         }
 
         for (column_key, value_key) in items_to_remove {
-            self.remove(&column_key, row_key_to_remove, &value_key);
+            self.remove(column_key, row_key_to_remove, value_key);
         }
-
-        self
     }
 
-    pub fn remove_by_column(&mut self, column_key_to_remove: &String) -> &mut Self {
-        let mut items_to_remove = HashSet::<(String, String)>::new();
+    pub fn remove_by_column(&mut self, column_key_to_remove: usize) {
+        let mut items_to_remove = HashSet::<(usize, usize)>::new();
 
         for (tuple, vals) in &self.tuples {
-            if tuple.0 == *column_key_to_remove {
+            if tuple.0 == column_key_to_remove {
                 for value_key in vals {
-                    let row_key = tuple.1.clone();
-                    let value_key = value_key.clone();
-                    let item = (row_key, value_key);
+                    let item = (tuple.1, *value_key);
                     items_to_remove.insert(item);
                 }
             }
         }
 
         for (row_key, value_key) in items_to_remove {
-            self.remove(column_key_to_remove, &row_key, &value_key);
+            self.remove(column_key_to_remove, row_key, value_key);
         }
-
-        self
     }
 
     pub fn is_empty(&self) -> bool {
@@ -128,15 +106,15 @@ impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
 #[derive(Clone, Debug)]
 pub struct InverseTable {
     // This column has these values except those at intersection with this row
-    column_value_keys_except: HashMap<(String, String), HashSet<String>>,
+    pub column_value_keys_except: HashMap<(usize, usize), HashSet<usize>>,
     // This row has these values except those at intersection with this column
-    row_value_keys_except: HashMap<(String, String), HashSet<String>>,
+    pub row_value_keys_except: HashMap<(usize, usize), HashSet<usize>>,
 }
 
 impl InverseTable {
     pub fn rebuild_from<C: TableKV, R: TableKV, V: TableKV>(table: &Table<C, R, V>) -> Self {
-        let mut column_value_keys_except = HashMap::<(String, String), HashSet<String>>::new();
-        let mut row_value_keys_except = HashMap::<(String, String), HashSet<String>>::new();
+        let mut column_value_keys_except = HashMap::<(usize, usize), HashSet<usize>>::new();
+        let mut row_value_keys_except = HashMap::<(usize, usize), HashSet<usize>>::new();
 
         for key @ (column_key, row_key) in table.tuples.keys() {
             let column_value_keys = table.columns.get(column_key).unwrap();
@@ -145,8 +123,8 @@ impl InverseTable {
             let column_values_diff = column_value_keys.difference(row_value_keys).cloned().collect();
             let row_values_diff = row_value_keys.difference(column_value_keys).cloned().collect();
 
-            column_value_keys_except.insert(key.clone(), column_values_diff);
-            row_value_keys_except.insert(key.clone(), row_values_diff);
+            column_value_keys_except.insert(*key, column_values_diff);
+            row_value_keys_except.insert(*key, row_values_diff);
         }
 
         InverseTable {
@@ -169,79 +147,84 @@ pub fn remove_from_set_and_map<K: Eq + Hash, V: Eq + Hash>(map: &mut HashMap<K, 
 
 #[cfg(test)]
 mod tests {
-    use alloc::string::ToString;
     use super::*;
 
     #[derive(Debug, Eq, PartialEq, Hash)]
-    struct Container(String);
+    struct Container(usize);
 
     impl TableKV for Container {
-        fn id(&self) -> String {
-            self.0.clone()
+        fn id(&self) -> usize {
+            self.0
         }
     }
 
     #[test]
     fn basic_ops() {
         let mut table: Table<Container, Container, Container> = Table::new();
-        table.insert(Container("1".to_string()), Container("2".to_string()), Container("11".to_string()));
-        table.insert(Container("1".to_string()), Container("2".to_string()), Container("11".to_string()));
-        table.insert(Container("1".to_string()), Container("2".to_string()), Container("12".to_string()));
-        table.insert(Container("1".to_string()), Container("3".to_string()), Container("12".to_string()));
-        table.insert(Container("4".to_string()), Container("2".to_string()), Container("10".to_string()));
+        table.insert(Container(1), Container(2), Container(11));
+        table.insert(Container(1), Container(2), Container(11));
+        table.insert(Container(1), Container(2), Container(12));
+        table.insert(Container(1), Container(3), Container(12));
 
-        assert_eq!(table.tuples.get(&("1".to_string(), "2".to_string())).unwrap().len(), 2);
-        assert_eq!(table.tuples.get(&("1".to_string(), "3".to_string())).unwrap().len(), 1);
-        assert_eq!(table.tuples.get(&("4".to_string(), "2".to_string())).unwrap().len(), 1);
-        assert!(table.remove_by_column(&"4".to_string()).remove_by_column(&"1".to_string()).is_empty());
+        assert_eq!(table.tuples.get(&(1, 2)).unwrap().len(), 2);
+        assert_eq!(table.tuples.get(&(1, 3)).unwrap().len(), 1);
+        assert!(table.tuples.get(&(4, 2)).is_none());
+        table.remove_by_column(4);
+        table.remove_by_column(1);
+        assert!(table.is_empty());
     }
 
     #[test]
     fn remove_handle_duplicate() {
         let mut table: Table<Container, Container, Container> = Table::new();
-        table.insert(Container("a".to_string()), Container("b".to_string()), Container("11".to_string()));
-        table.insert(Container("a".to_string()), Container("b".to_string()), Container("11".to_string()));
-        assert!(!table.remove(&"a".to_string(), &"c".to_string(), &"12".to_string()).is_empty());
-        assert!(table.remove(&"a".to_string(), &"b".to_string(), &"11".to_string()).is_empty());
+        table.insert(Container(1), Container(2), Container(11));
+        table.insert(Container(1), Container(2), Container(11));
+        table.remove(1, 2, 11);
+        assert!(table.is_empty());
     }
 
     #[test]
     fn remove_by_column() {
         let mut table: Table<Container, Container, Container> = Table::new();
-        table.insert(Container("a".to_string()), Container("b".to_string()), Container("11".to_string()));
-        table.insert(Container("a".to_string()), Container("b".to_string()), Container("12".to_string()));
-        table.insert(Container("a".to_string()), Container("c".to_string()), Container("12".to_string()));
-        table.insert(Container("a".to_string()), Container("c".to_string()), Container("14".to_string()));
-        assert!(table.remove_by_column(&"a".to_string()).is_empty());
+        table.insert(Container(1), Container(2), Container(11));
+        table.insert(Container(1), Container(2), Container(12));
+        table.insert(Container(1), Container(3), Container(14));
+        table.insert(Container(1), Container(3), Container(15));
+        table.remove_by_column(1);
+        assert!(table.is_empty());
     }
 
     #[test]
     fn remove_by_row() {
         let mut table: Table<Container, Container, Container> = Table::new();
-        table.insert(Container("c".to_string()), Container("a".to_string()), Container("11".to_string()));
-        table.insert(Container("b".to_string()), Container("a".to_string()), Container("12".to_string()));
-        table.insert(Container("d".to_string()), Container("a".to_string()), Container("12".to_string()));
-        table.insert(Container("e".to_string()), Container("a".to_string()), Container("14".to_string()));
-        assert!(table.remove_by_row(&"a".to_string()).is_empty());
+        table.insert(Container(2), Container(1), Container(11));
+        table.insert(Container(3), Container(1), Container(12));
+        table.insert(Container(4), Container(1), Container(13));
+        table.insert(Container(5), Container(1), Container(14));
+        table.remove_by_row(1);
+        assert!(table.is_empty());
     }
 
     #[test]
     fn inverse_table() {
-        let mut hs1 = HashSet::<String>::new();
-        hs1.insert("12".to_string());
-        hs1.insert("15".to_string());
+        let mut hs1 = HashSet::<usize>::new();
+        hs1.insert(12);
+        hs1.insert(15);
 
-        let mut hs2 = HashSet::<String>::new();
-        hs2.insert("16".to_string());
+        let mut hs2 = HashSet::<usize>::new();
+        hs2.insert(17);
 
         let mut table: Table<Container, Container, Container> = Table::new();
-        table.insert(Container("a".to_string()), Container("b".to_string()), Container("12".to_string()));
-        table.insert(Container("a".to_string()), Container("c".to_string()), Container("14".to_string()));
-        table.insert(Container("a".to_string()), Container("d".to_string()), Container("15".to_string()));
-        table.insert(Container("e".to_string()), Container("b".to_string()), Container("16".to_string()));
+        table.insert(Container(1), Container(2), Container(12));
+        table.insert(Container(1), Container(3), Container(14));
+        table.insert(Container(1), Container(2), Container(15));
+        table.insert(Container(4), Container(5), Container(16));
+        table.insert(Container(2), Container(5), Container(17));
+        table.insert(Container(2), Container(6), Container(17));
 
         let inverse: InverseTable = InverseTable::rebuild_from(&table);
-        assert_eq!(inverse.column_value_keys_except.get(&("a".to_string(), "c".to_string())).unwrap(), &hs1);
-        assert_eq!(inverse.row_value_keys_except.get(&("a".to_string(), "b".to_string())).unwrap(), &hs2);
+        assert_eq!(inverse.column_value_keys_except.get(&(1, 3)).unwrap(), &hs1);
+        assert_eq!(inverse.row_value_keys_except.get(&(4, 5)).unwrap(), &hs2);
+        assert!(inverse.row_value_keys_except.get(&(4, 6)).is_none());
     }
 }
