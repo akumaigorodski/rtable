@@ -109,12 +109,18 @@ pub struct InverseTable {
     pub column_value_keys_except: HashMap<(usize, usize), HashSet<usize>>,
     // This row has these values except those at intersection with this column
     pub row_value_keys_except: HashMap<(usize, usize), HashSet<usize>>,
+    // This column has connections to this set of rows
+    pub column_row_keys: HashMap<usize, HashSet<usize>>,
+    // This row has connections to this set of columns
+    pub row_column_keys: HashMap<usize, HashSet<usize>>,
 }
 
 impl InverseTable {
     pub fn rebuild_from<C: TableKV, R: TableKV, V: TableKV>(table: &Table<C, R, V>) -> Self {
         let mut column_value_keys_except = HashMap::<(usize, usize), HashSet<usize>>::new();
         let mut row_value_keys_except = HashMap::<(usize, usize), HashSet<usize>>::new();
+        let mut column_row_keys = HashMap::<usize, HashSet<usize>>::new();
+        let mut row_column_keys = HashMap::<usize, HashSet<usize>>::new();
 
         for key @ (column_key, row_key) in table.tuples.keys() {
             let column_value_keys = table.columns.get(column_key).unwrap();
@@ -125,11 +131,16 @@ impl InverseTable {
 
             column_value_keys_except.insert(*key, column_values_diff);
             row_value_keys_except.insert(*key, row_values_diff);
+
+            column_row_keys.entry(*column_key).or_insert_with(HashSet::new).insert(*row_key);
+            row_column_keys.entry(*row_key).or_insert_with(HashSet::new).insert(*column_key);
         }
 
         InverseTable {
             column_value_keys_except,
-            row_value_keys_except
+            row_value_keys_except,
+            column_row_keys,
+            row_column_keys,
         }
     }
 }
@@ -207,6 +218,7 @@ mod tests {
 
     #[test]
     fn inverse_table() {
+        let hs0 = HashSet::<usize>::new();
         let mut hs1 = HashSet::<usize>::new();
         hs1.insert(12);
         hs1.insert(15);
@@ -223,6 +235,7 @@ mod tests {
         table.insert(Container(2), Container(6), Container(17));
 
         let inverse: InverseTable = InverseTable::rebuild_from(&table);
+        assert_eq!(inverse.row_value_keys_except.get(&(2, 6)).unwrap(), &hs0);
         assert_eq!(inverse.column_value_keys_except.get(&(1, 3)).unwrap(), &hs1);
         assert_eq!(inverse.row_value_keys_except.get(&(4, 5)).unwrap(), &hs2);
         assert!(inverse.row_value_keys_except.get(&(4, 6)).is_none());
