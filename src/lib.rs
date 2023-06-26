@@ -41,6 +41,7 @@ impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
     }
 
     pub fn insert_column_value(&mut self, column: C, row_key: usize, value: V) {
+        // It is assumed here that row has already been inserted previously
         let column_key = column.id();
 
         self.insert_value(column_key, row_key, value);
@@ -48,6 +49,7 @@ impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
     }
 
     pub fn insert_row_value(&mut self, column_key: usize, row: R, value: V) {
+        // It is assumed here that column has already been inserted previously
         let row_key = row.id();
 
         self.insert_value(column_key, row_key, value);
