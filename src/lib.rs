@@ -1,8 +1,9 @@
 #![no_std]
 
+use core::hash::Hash;
+
 use hashbrown::HashMap;
 use hashbrown::HashSet;
-use core::hash::Hash;
 
 pub trait TableKV: Eq + PartialEq + Hash {
     fn id(&self) -> usize;
@@ -32,17 +33,35 @@ impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
 
     pub fn insert(&mut self, column: C, row: R, value: V) {
         let column_key = column.id();
-        let value_key = value.id();
         let row_key = row.id();
 
+        self.insert_value(column_key, row_key, value);
+        self.cs.insert(column_key, column);
+        self.rs.insert(row_key, row);
+    }
+
+    pub fn insert_column_value(&mut self, column: C, row_key: usize, value: V) {
+        let column_key = column.id();
+
+        self.insert_value(column_key, row_key, value);
+        self.cs.insert(column_key, column);
+    }
+
+    pub fn insert_row_value(&mut self, column_key: usize, row: R, value: V) {
+        let row_key = row.id();
+
+        self.insert_value(column_key, row_key, value);
+        self.rs.insert(row_key, row);
+    }
+
+    pub fn insert_value(&mut self, column_key: usize, row_key: usize, value: V) {
         let column_row_key = (column_key, row_key);
+        let value_key = value.id();
+
         self.tuples.entry(column_row_key).or_insert_with(HashSet::new).insert(value_key);
         self.columns.entry(column_key).or_insert_with(HashSet::new).insert(value_key);
         self.rows.entry(row_key).or_insert_with(HashSet::new).insert(value_key);
-
         self.vs.insert(value_key, value);
-        self.cs.insert(column_key, column);
-        self.rs.insert(row_key, row);
     }
 
     pub fn remove(&mut self, column_key: usize, row_key: usize, value_key: usize) {
