@@ -16,34 +16,52 @@ pub trait TableKV: Eq + PartialEq + Hash {
     fn id(&self) -> usize;
 }
 
+/*
+pub struct Table<C: TableKV, R: TableKV, V: TableKV> {
+    // Intersection of column and row has these values
+    pub tuples: HashMap<(usize, usize), HashSet<usize>>,
+    // A given column is connected to all these rows
+    pub cols2rows: HashMap<usize, HashVec<usize>>,
+    // A given row is connected to all these columns
+    pub rows2cols: HashMap<usize, HashVec<usize>>,
+    // A given column has these values with all rows
+    pub cols2values: HashMap<usize, HashSet<usize>>,
+    // A given row has these values with all columns
+    pub rows2values: HashMap<usize, HashSet<usize>>,
+    pub values: HashMap<usize, V>,
+    pub cols: HashMap<usize, C>,
+    pub rows: HashMap<usize, R>,
+}
+ */
+
 #[derive(Clone, Debug)]
 pub struct Table<C: TableKV, R: TableKV, V: TableKV> {
     // Intersection of column and row has these values
     pub tuples: HashMap<(usize, usize), HashSet<usize>>,
     // A given column is connected to all these rows
-    pub columns2rows: HashMap<usize, HashVec<usize>>,
+    pub cols2rows: HashMap<usize, HashVec<usize>>,
     // A given row is connected to all these columns
-    pub rows2columns: HashMap<usize, HashVec<usize>>,
+    pub rows2cols: HashMap<usize, HashVec<usize>>,
     // A given column has these values with all rows
-    pub columns2vs: HashMap<usize, HashSet<usize>>,
+    pub cols2values: HashMap<usize, HashSet<usize>>,
     // A given row has these values with all columns
-    pub rows2vs: HashMap<usize, HashSet<usize>>,
-    pub vs: HashMap<usize, V>,
-    pub cs: HashMap<usize, C>,
-    pub rs: HashMap<usize, R>,
+    pub rows2values: HashMap<usize, HashSet<usize>>,
+    pub values: HashMap<usize, V>,
+    pub cols: HashMap<usize, C>,
+    pub rows: HashMap<usize, R>,
 }
 
 impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
     pub fn new() -> Self {
         Table {
             tuples: HashMap::new(),
-            columns2rows: HashMap::new(),
-            rows2columns: HashMap::new(),
-            columns2vs: HashMap::new(),
-            rows2vs: HashMap::new(),
-            vs: HashMap::new(),
-            cs: HashMap::new(),
-            rs: HashMap::new(),
+            cols2rows: HashMap::new(),
+            rows2cols: HashMap::new(),
+            cols2values: HashMap::new(),
+            rows2values: HashMap::new(),
+            values: HashMap::new(),
+            cols: HashMap::new(),
+            rows: HashMap::new(),
         }
     }
 
@@ -52,8 +70,8 @@ impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
         let row_key = row.id();
 
         self.insert_value(column_key, row_key, value);
-        self.cs.insert(column_key, column);
-        self.rs.insert(row_key, row);
+        self.cols.insert(column_key, column);
+        self.rows.insert(row_key, row);
     }
 
     pub fn insert_column_value(&mut self, column: C, row_key: usize, value: V) {
@@ -61,7 +79,7 @@ impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
         let column_key = column.id();
 
         self.insert_value(column_key, row_key, value);
-        self.cs.insert(column_key, column);
+        self.cols.insert(column_key, column);
     }
 
     pub fn insert_row_value(&mut self, column_key: usize, row: R, value: V) {
@@ -69,7 +87,7 @@ impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
         let row_key = row.id();
 
         self.insert_value(column_key, row_key, value);
-        self.rs.insert(row_key, row);
+        self.rows.insert(row_key, row);
     }
 
     pub fn insert_value(&mut self, column_key: usize, row_key: usize, value: V) {
@@ -77,31 +95,31 @@ impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
         let value_key = value.id();
 
         self.tuples.entry(column_row_key).or_insert_with(HashSet::new).insert(value_key);
-        self.columns2vs.entry(column_key).or_insert_with(HashSet::new).insert(value_key);
-        self.rows2vs.entry(row_key).or_insert_with(HashSet::new).insert(value_key);
+        self.cols2values.entry(column_key).or_insert_with(HashSet::new).insert(value_key);
+        self.rows2values.entry(row_key).or_insert_with(HashSet::new).insert(value_key);
 
-        self.columns2rows.entry(column_key).or_insert_with(HashVec::new).add_if_not_exists(row_key);
-        self.rows2columns.entry(row_key).or_insert_with(HashVec::new).add_if_not_exists(column_key);
+        self.cols2rows.entry(column_key).or_insert_with(HashVec::new).add_if_not_exists(row_key);
+        self.rows2cols.entry(row_key).or_insert_with(HashVec::new).add_if_not_exists(column_key);
 
-        self.vs.insert(value_key, value);
+        self.values.insert(value_key, value);
     }
 
     pub fn remove(&mut self, column_key: usize, row_key: usize, value_key: usize) {
         remove_from_set_and_map(&mut self.tuples, &(column_key, row_key), &value_key);
-        remove_from_set_and_map(&mut self.columns2vs, &column_key, &value_key);
-        remove_from_set_and_map(&mut self.rows2vs, &row_key, &value_key);
+        remove_from_set_and_map(&mut self.cols2values, &column_key, &value_key);
+        remove_from_set_and_map(&mut self.rows2values, &row_key, &value_key);
 
-        remove_from_hashvec_and_map(&mut self.columns2rows, &column_key, row_key);
-        remove_from_hashvec_and_map(&mut self.rows2columns, &row_key, column_key);
+        remove_from_hashvec_and_map(&mut self.cols2rows, &column_key, row_key);
+        remove_from_hashvec_and_map(&mut self.rows2cols, &row_key, column_key);
 
-        self.vs.remove(&value_key);
+        self.values.remove(&value_key);
 
-        if !self.columns2vs.contains_key(&column_key) {
-            self.cs.remove(&column_key);
+        if !self.cols2values.contains_key(&column_key) {
+            self.cols.remove(&column_key);
         }
 
-        if !self.rows2vs.contains_key(&row_key) {
-            self.rs.remove(&row_key);
+        if !self.rows2values.contains_key(&row_key) {
+            self.rows.remove(&row_key);
         }
     }
 
@@ -140,8 +158,8 @@ impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
     }
 
     pub fn is_empty(&self) -> bool {
-        let all_empty = self.tuples.is_empty() && self.columns2vs.is_empty() && self.rows2vs.is_empty() && self.columns2rows.is_empty() && self.rows2columns.is_empty();
-        let all_non_empty = !self.tuples.is_empty() && !self.columns2vs.is_empty() && !self.rows2vs.is_empty() && self.columns2rows.is_empty() && self.rows2columns.is_empty();
+        let all_empty = self.tuples.is_empty() && self.cols2values.is_empty() && self.rows2values.is_empty() && self.cols2rows.is_empty() && self.rows2cols.is_empty();
+        let all_non_empty = !self.tuples.is_empty() && !self.cols2values.is_empty() && !self.rows2values.is_empty() && self.cols2rows.is_empty() && self.rows2cols.is_empty();
         assert!(all_empty || all_non_empty);
         all_empty
     }
@@ -161,8 +179,8 @@ impl InverseTable {
         let mut row_value_keys_except = HashMap::<(usize, usize), HashSet<usize>>::new();
 
         for key @ (column_key, row_key) in table.tuples.keys() {
-            let column_value_keys = table.columns2vs.get(column_key).unwrap();
-            let row_value_keys = table.rows2vs.get(row_key).unwrap();
+            let column_value_keys = table.cols2values.get(column_key).unwrap();
+            let row_value_keys = table.rows2values.get(row_key).unwrap();
 
             let column_values_diff = column_value_keys.difference(row_value_keys).cloned().collect();
             let row_values_diff = row_value_keys.difference(column_value_keys).cloned().collect();
@@ -223,13 +241,13 @@ mod tests {
         table.insert(Container(1), Container(2), Container(12));
         table.insert(Container(1), Container(3), Container(12));
 
-        assert_eq!(table.columns2rows.get(&1).unwrap().vector, vec![Rc::new(2), Rc::new(3)]);
-        assert_eq!(table.rows2columns.get(&3).unwrap().vector, vec![Rc::new(1)]);
+        assert_eq!(table.cols2rows.get(&1).unwrap().vector, vec![Rc::new(2), Rc::new(3)]);
+        assert_eq!(table.rows2cols.get(&3).unwrap().vector, vec![Rc::new(1)]);
         assert_eq!(table.tuples.get(&(1, 2)).unwrap().len(), 2);
         assert_eq!(table.tuples.get(&(1, 3)).unwrap().len(), 1);
         assert!(table.tuples.get(&(4, 2)).is_none());
         table.remove_by_row(2);
-        assert_eq!(table.columns2rows.get(&1).unwrap().vector, vec![Rc::new(3)]);
+        assert_eq!(table.cols2rows.get(&1).unwrap().vector, vec![Rc::new(3)]);
         table.remove_by_column(1);
         assert!(table.is_empty());
     }
@@ -240,7 +258,7 @@ mod tests {
         table.insert(Container(1), Container(2), Container(11));
         table.insert(Container(1), Container(2), Container(11));
         table.remove(1, 2, 11);
-        assert_eq!(table.columns2rows.get(&1).unwrap().vector, vec![Rc::new(2)]);
+        assert_eq!(table.cols2rows.get(&1).unwrap().vector, vec![Rc::new(2)]);
         assert!(table.is_empty());
     }
 
