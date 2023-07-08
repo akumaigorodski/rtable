@@ -2,46 +2,21 @@
 
 extern crate alloc;
 
-use alloc::rc::Rc;
 use core::hash::Hash;
 
 use hashbrown::HashMap;
 use hashbrown::HashSet;
-use crate::hashvec::HashVec;
 
-mod hashvec;
 mod utils;
 
 pub trait TableKV: Eq + PartialEq + Hash {
     fn id(&self) -> usize;
 }
 
-/*
-pub struct Table<C: TableKV, R: TableKV, V: TableKV> {
-    // Intersection of column and row has these values
-    pub tuples: HashMap<(usize, usize), HashSet<usize>>,
-    // A given column is connected to all these rows
-    pub cols2rows: HashMap<usize, HashVec<usize>>,
-    // A given row is connected to all these columns
-    pub rows2cols: HashMap<usize, HashVec<usize>>,
-    // A given column has these values with all rows
-    pub cols2values: HashMap<usize, HashSet<usize>>,
-    // A given row has these values with all columns
-    pub rows2values: HashMap<usize, HashSet<usize>>,
-    pub values: HashMap<usize, V>,
-    pub cols: HashMap<usize, C>,
-    pub rows: HashMap<usize, R>,
-}
- */
-
 #[derive(Clone, Debug)]
 pub struct Table<C: TableKV, R: TableKV, V: TableKV> {
     // Intersection of column and row has these values
     pub tuples: HashMap<(usize, usize), HashSet<usize>>,
-    // A given column is connected to all these rows
-    pub cols2rows: HashMap<usize, HashVec<usize>>,
-    // A given row is connected to all these columns
-    pub rows2cols: HashMap<usize, HashVec<usize>>,
     // A given column has these values with all rows
     pub cols2values: HashMap<usize, HashSet<usize>>,
     // A given row has these values with all columns
@@ -55,8 +30,6 @@ impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
     pub fn new() -> Self {
         Table {
             tuples: HashMap::new(),
-            cols2rows: HashMap::new(),
-            rows2cols: HashMap::new(),
             cols2values: HashMap::new(),
             rows2values: HashMap::new(),
             values: HashMap::new(),
@@ -98,9 +71,6 @@ impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
         self.cols2values.entry(column_key).or_insert_with(HashSet::new).insert(value_key);
         self.rows2values.entry(row_key).or_insert_with(HashSet::new).insert(value_key);
 
-        self.cols2rows.entry(column_key).or_insert_with(HashVec::new).add_if_not_exists(row_key);
-        self.rows2cols.entry(row_key).or_insert_with(HashVec::new).add_if_not_exists(column_key);
-
         self.values.insert(value_key, value);
     }
 
@@ -108,9 +78,6 @@ impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
         remove_from_set_and_map(&mut self.tuples, &(column_key, row_key), &value_key);
         remove_from_set_and_map(&mut self.cols2values, &column_key, &value_key);
         remove_from_set_and_map(&mut self.rows2values, &row_key, &value_key);
-
-        remove_from_hashvec_and_map(&mut self.cols2rows, &column_key, row_key);
-        remove_from_hashvec_and_map(&mut self.rows2cols, &row_key, column_key);
 
         self.values.remove(&value_key);
 
@@ -158,8 +125,8 @@ impl<C: TableKV, R: TableKV, V: TableKV> Table<C, R, V> {
     }
 
     pub fn is_empty(&self) -> bool {
-        let all_empty = self.tuples.is_empty() && self.cols2values.is_empty() && self.rows2values.is_empty() && self.cols2rows.is_empty() && self.rows2cols.is_empty();
-        let all_non_empty = !self.tuples.is_empty() && !self.cols2values.is_empty() && !self.rows2values.is_empty() && self.cols2rows.is_empty() && self.rows2cols.is_empty();
+        let all_empty = self.tuples.is_empty() && self.cols2values.is_empty() && self.rows2values.is_empty();
+        let all_non_empty = !self.tuples.is_empty() && !self.cols2values.is_empty() && !self.rows2values.is_empty();
         assert!(all_empty || all_non_empty);
         all_empty
     }
@@ -207,21 +174,8 @@ pub fn remove_from_set_and_map<K: Eq + Hash, V: Eq + Hash>(map: &mut HashMap<K, 
     }
 }
 
-// A utility to remove a value from HashVec which is a value of HashMap, and then remove a HashMap key if hashvec becomes empty
-pub fn remove_from_hashvec_and_map<K: Eq + Hash, V: Eq + Hash>(map: &mut HashMap<K, HashVec<V>>, key: &K, value: V) {
-    if let Some(inner_set) = map.get_mut(key) {
-        let rc_value = Rc::new(value);
-        inner_set.remove(&rc_value);
-
-        if inner_set.hash.is_empty() {
-            map.remove(key);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use alloc::vec;
     use super::*;
 
     #[derive(Debug, Eq, PartialEq, Hash)]
@@ -241,15 +195,9 @@ mod tests {
         table.insert(Container(1), Container(2), Container(12));
         table.insert(Container(1), Container(3), Container(12));
 
-        assert_eq!(table.cols2rows.get(&1).unwrap().vector, vec![Rc::new(2), Rc::new(3)]);
-        assert_eq!(table.rows2cols.get(&3).unwrap().vector, vec![Rc::new(1)]);
         assert_eq!(table.tuples.get(&(1, 2)).unwrap().len(), 2);
         assert_eq!(table.tuples.get(&(1, 3)).unwrap().len(), 1);
         assert!(table.tuples.get(&(4, 2)).is_none());
-        table.remove_by_row(2);
-        assert_eq!(table.cols2rows.get(&1).unwrap().vector, vec![Rc::new(3)]);
-        table.remove_by_column(1);
-        assert!(table.is_empty());
     }
 
     #[test]
@@ -258,7 +206,6 @@ mod tests {
         table.insert(Container(1), Container(2), Container(11));
         table.insert(Container(1), Container(2), Container(11));
         table.remove(1, 2, 11);
-        assert_eq!(table.cols2rows.get(&1).unwrap().vector, vec![Rc::new(2)]);
         assert!(table.is_empty());
     }
 
