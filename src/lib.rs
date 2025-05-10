@@ -1,13 +1,7 @@
-#![no_std]
-
-extern crate alloc;
-
 use core::hash::Hash;
+use std::collections::HashMap;
 
-use hashbrown::HashMap;
 use hashbrown::HashSet;
-
-mod utils;
 
 pub trait TableKV: Eq + PartialEq + Hash {
     fn id(&self) -> usize;
