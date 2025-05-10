@@ -1,7 +1,5 @@
 use core::hash::Hash;
-use std::collections::HashMap;
-
-use hashbrown::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub trait TableKV: Eq + PartialEq + Hash {
     fn id(&self) -> usize;

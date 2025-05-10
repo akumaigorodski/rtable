@@ -2,6 +2,10 @@
 name = "table"
 version = "0.1.0"
 edition = "2021"
-
-[dependencies]
-hashbrown = "0.14.0"
+authors = ["Anton Kumaihorodskyi <anton@aetos.space>"]
+repository = "https://github.com/Aetos-Space-Labs/rtable"
+description = "Efficient Table data structure"
+keywords = ["rust", "data-structure", "table"]
+categories = ["development-tools"]
+license = "Apache-2.0"
+readme = "README.md"
