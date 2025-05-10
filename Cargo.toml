@@ -1,5 +1,5 @@
 [package]
-name = "table"
+name = "rtable"
 version = "0.1.0"
 edition = "2021"
 authors = ["Anton Kumaihorodskyi <anton@aetos.space>"]
