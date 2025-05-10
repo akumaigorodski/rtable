@@ -1,10 +1,10 @@
 [package]
-name = "rtable"
+name = "guava-table"
 version = "0.1.0"
 edition = "2021"
 authors = ["Anton Kumaihorodskyi <anton@aetos.space>"]
 repository = "https://github.com/Aetos-Space-Labs/rtable"
-description = "Efficient Table data structure"
+description = "Efficient Table data structure similar to Guava Table from Java world"
 keywords = ["rust", "data-structure", "table"]
 categories = ["development-tools"]
 license = "Apache-2.0"
